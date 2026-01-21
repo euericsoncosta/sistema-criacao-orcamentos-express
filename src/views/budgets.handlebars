@@ -1,0 +1,227 @@
+<div class="container pb-5">
+    <!-- CABEÇALHO DA PÁGINA -->
+    <nav aria-label="breadcrumb" class="mb-4 no-print">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/" class="text-decoration-none">Início</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Todos os Orçamentos</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 fw-bold text-dark">Todos os Orçamentos</h1>
+            <p class="text-muted mb-0">Gerencie e acompanhe todos os registros do sistema em tempo real.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-primary shadow-sm px-4" onclick="openBudgetModal('/budgets/new')">
+                <i class="bi bi-plus-lg me-2"></i>Novo Orçamento
+            </button>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="card border-0 shadow-sm mb-4 no-print">
+        <div class="card-body">
+            <form class="row g-3 align-items-center" id="filterForm">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                        <input type="text" id="filterCustomer" class="form-control border-start-0" placeholder="Pesquisar cliente..." />
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="filterStatus">
+                        <option selected value="">Todos os Estados</option>
+                        <option value="Pending">Pendentes</option>
+                        <option value="Approved">Aprovados</option>
+                        <option value="Rejected">Rejeitados</option>
+                    </select>
+                </div>
+                <div class="col-md-5 text-end">
+                    <button type="button" class="btn btn-outline-secondary" id="btnClearFilters">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>Limpar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TABELA COMPLETA -->
+    <div class="card border-0 shadow-sm overflow-hidden">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="budgetTable">
+                <thead class="bg-light text-muted small text-uppercase">
+                    <tr>
+                        <th class="ps-4 py-3">ID</th>
+                        <th style="width: 25%">Cliente</th>
+                        <th>Emissão</th>
+                        <th>Validade</th>
+                        <th>Valor Total (R$)</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-end pe-4">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="budgetTableBody">
+                    {{#each budgets}}
+                    <!-- Adicionado data-status e data-name para o filtro -->
+                    <tr class="budget-row" data-status="{{this.status}}" data-name="{{this.customerName}}">
+                        <td class="ps-4 text-muted">#{{this.id}}</td>
+                        <td>
+                            <div class="fw-bold text-dark">{{this.customerName}}</div>
+                            <small class="text-muted">{{this.customerEmail}}</small>
+                        </td>
+                        <td>{{formatDate this.issueDate}}</td>
+                        <td>{{formatDate this.expiryDate}}</td>
+                        <td><span class="fw-bold text-primary">{{formatCurrency this.totalAmount}}</span></td>
+                        <td class="text-center">
+                            {{#if (eq this.status "Pending")}}
+                            <span class="badge rounded-pill bg-warning-subtle text-warning px-3 border border-warning-subtle">Pendente</span>
+                            {{else if (eq this.status "Approved")}}
+                            <span class="badge rounded-pill bg-success-subtle text-success px-3 border border-success-subtle">Aprovado</span>
+                            {{else if (eq this.status "Rejected")}}
+                            <span class="badge rounded-pill bg-danger-subtle text-danger px-3 border border-danger-subtle">Rejeitado</span>
+                            {{/if}}
+                        </td>
+                        <td class="text-end pe-4">
+                            <div class="btn-group shadow-sm">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" title="Visualizar" 
+                                    onclick="openBudgetModal('/budgets/view/{{this.id}}')">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" title="Editar"
+                                    onclick="openBudgetModal('/budgets/edit/{{this.id}}')">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" title="Excluir"
+                                    onclick="if(confirm('Tem certeza que deseja excluir este orçamento permanentemente?')) window.location.href='/budgets/delete/{{this.id}}'">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {{else}}
+                    <tr>
+                        <td colspan="7" class="py-5 text-center text-muted">
+                            <i class="bi bi-folder-x fs-1 d-block mb-3 opacity-25"></i>
+                            Não existem orçamentos registrados no sistema.
+                        </td>
+                    </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer bg-white py-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted" id="showingCounter">
+                    Mostrando <strong>{{budgets.length}}</strong> orçamentos encontrados.
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ESTRUTURA DO MODAL -->
+<div class="modal fade" id="budgetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 15px;">
+            <div class="modal-header bg-light border-0 py-3">
+                <h5 class="modal-title fw-bold">Gestão de Orçamento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body p-0" id="budgetModalBody">
+                <div class="d-flex justify-content-center py-5">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /**
+     * Lógica de Filtragem de Orçamentos
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+        const filterCustomer = document.getElementById('filterCustomer');
+        const filterStatus = document.getElementById('filterStatus');
+        const btnClear = document.getElementById('btnClearFilters');
+        const rows = document.querySelectorAll('.budget-row');
+        const counter = document.getElementById('showingCounter');
+
+        function applyFilters() {
+            const nameSearch = filterCustomer.value.toLowerCase();
+            const statusSearch = filterStatus.value;
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+                const rowName = row.getAttribute('data-name').toLowerCase();
+                const rowStatus = row.getAttribute('data-status');
+
+                const matchesName = rowName.includes(nameSearch);
+                const matchesStatus = statusSearch === "" || rowStatus === statusSearch;
+
+                if (matchesName && matchesStatus) {
+                    row.style.display = "";
+                    visibleCount++;
+                } else {
+                    row.style.display = "none";
+                }
+            });
+
+            counter.innerHTML = `Mostrando <strong>${visibleCount}</strong> orçamentos encontrados.`;
+        }
+
+        // Eventos para filtrar ao digitar ou mudar o select
+        filterCustomer.addEventListener('input', applyFilters);
+        filterStatus.addEventListener('change', applyFilters);
+
+        // Botão para limpar filtros
+        btnClear.addEventListener('click', () => {
+            filterCustomer.value = "";
+            filterStatus.value = "";
+            applyFilters();
+        });
+    });
+
+    /**
+     * Função para carregar as views no Modal
+     */
+    async function openBudgetModal(url) {
+        const modalElement = document.getElementById('budgetModal');
+        const modalBody = document.getElementById('budgetModalBody');
+        const modalInstance = new bootstrap.Modal(modalElement);
+        
+        modalBody.innerHTML = `
+            <div class="d-flex justify-content-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Carregando...</span>
+                </div>
+            </div>`;
+        
+        modalInstance.show();
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Erro ao buscar dados do servidor.');
+            
+            const html = await response.text();
+            modalBody.innerHTML = html;
+
+            const scripts = modalBody.querySelectorAll('script');
+            scripts.forEach(oldScript => {
+                const newScript = document.createElement('script');
+                Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                oldScript.parentNode.replaceChild(newScript, oldScript);
+            });
+
+        } catch (error) {
+            modalBody.innerHTML = `
+                <div class="alert alert-danger m-4">
+                    <i class="bi bi-exclamation-triangle me-2"></i> ${error.message}
+                </div>`;
+        }
+    }
+</script>
