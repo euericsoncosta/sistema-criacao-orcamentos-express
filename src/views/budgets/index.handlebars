@@ -1,0 +1,147 @@
+<div class="container pb-5 animate-fade-in">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h2 class="fw-bold text-dark mb-0">Gestão de Orçamentos</h2>
+      <p class="text-muted mb-0">Consulte, filtre e gira todas as propostas comerciais do sistema.</p>
+    </div>
+    <a href="/budgets/new" class="btn btn-primary shadow-sm px-4">
+      <i class="bi bi-plus-lg me-2"></i>Novo Orçamento
+    </a>
+  </div>
+
+  <div class="card shadow-sm border-0 mb-4 no-print">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-7">
+          <div class="input-group">
+            <span class="input-group-text bg-white border-end-0">
+              <i class="bi bi-search text-muted"></i>
+            </span>
+            <input type="text" id="searchClient" class="form-control border-start-0" placeholder="Pesquisar por nome do cliente...">
+          </div>
+        </div>
+        <div class="col-md-3">
+          <select id="statusFilter" class="form-select">
+            <option value="">Todos os Estados</option>
+            <option value="Pending">Pendentes</option>
+            <option value="Approved">Aprovados</option>
+            <option value="Rejected">Rejeitados</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="button" onclick="clearFilters()" class="btn btn-outline-secondary w-100">
+            <i class="bi bi-x-circle me-1"></i>Limpar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm border-0 overflow-hidden">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="budgetTable">
+        <thead class="table-light text-secondary small text-uppercase">
+          <tr>
+            <th class="ps-4 py-3" style="width: 80px;">ID</th>
+            <th style="width: 30%;">Cliente</th>
+            <th>Data de Emissão</th>
+            <th>Valor Total</th>
+            <th class="text-center">Estado</th>
+            <th class="text-end pe-4">Ações</th>
+          </tr>
+        </thead>
+        <tbody id="budgetTableBody">
+          {{#each budgets}}
+          <tr class="budget-row" data-name="{{this.customerName}}" data-status="{{this.status}}">
+            <td class="ps-4 text-muted">#{{this.id}}</td>
+            <td>
+              <div class="fw-bold text-dark">{{this.customerName}}</div>
+              <small class="text-muted">{{this.customerEmail}}</small>
+            </td>
+            <td>{{formatDate this.issueDate}}</td>
+            <td><span class="fw-bold text-primary">{{formatCurrency this.totalAmount}}</span></td>
+            <td class="text-center">
+              {{#if (eq this.status "Pending")}}
+              <span class="badge rounded-pill bg-warning-subtle text-warning border border-warning-subtle px-3">Pendente</span>
+              {{else if (eq this.status "Approved")}}
+              <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-3">Aprovado</span>
+              {{else if (eq this.status "Rejected")}}
+              <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-3">Rejeitado</span>
+              {{/if}}
+            </td>
+            <td class="text-end pe-4">
+              <div class="btn-group shadow-sm">
+                <a href="/budgets/view/{{this.id}}" class="btn btn-sm btn-outline-secondary" title="Visualizar / Imprimir PDF">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <a href="/budgets/edit/{{this.id}}" class="btn btn-sm btn-outline-secondary" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <a href="/budgets/delete/{{this.id}}" class="btn btn-sm btn-outline-danger" title="Eliminar" onclick="return confirm('Tem a certeza que deseja eliminar o orçamento #{{this.id}}? Esta ação é irreversível.')">
+                  <i class="bi bi-trash"></i>
+                </a>
+              </div>
+            </td>
+          </tr>
+          {{else}}
+          <tr>
+            <td colspan="6" class="text-center py-5 text-muted">
+              <i class="bi bi-folder-x fs-1 d-block mb-3 opacity-25"></i>
+              Ainda não existem orçamentos registados no sistema.
+            </td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer bg-white border-top-0 py-3">
+      <small class="text-muted" id="rowCountDisplay">
+        Mostrando <strong>{{budgets.length}}</strong> orçamentos encontrados.
+      </small>
+    </div>
+  </div>
+</div>
+
+<script>
+  /**
+   * Lógica de Filtragem em Tempo Real
+   */
+  document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchClient');
+    const statusSelect = document.getElementById('statusFilter');
+    const rows = document.querySelectorAll('.budget-row');
+    const counter = document.getElementById('rowCountDisplay');
+
+    function filterTable() {
+      const nameQuery = searchInput.value.toLowerCase();
+      const statusQuery = statusSelect.value;
+      let visibleCount = 0;
+
+      rows.forEach(row => {
+        const clientName = row.dataset.name.toLowerCase();
+        const status = row.dataset.status;
+
+        const nameMatch = clientName.includes(nameQuery);
+        const statusMatch = !statusQuery || status === statusQuery;
+
+        if (nameMatch && statusMatch) {
+          row.style.display = '';
+          visibleCount++;
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      counter.innerHTML = `Mostrando <strong>${visibleCount}</strong> orçamentos encontrados.`;
+    }
+
+    searchInput.addEventListener('input', filterTable);
+    statusSelect.addEventListener('change', filterTable);
+
+    window.clearFilters = function() {
+      searchInput.value = '';
+      statusSelect.value = '';
+      filterTable();
+    };
+  });
+</script>

@@ -1,0 +1,158 @@
+<style>
+    /* Estilos para o ecrã */
+    .quote-paper {
+        background: #fff;
+        padding: 60px;
+        border-radius: 8px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.05);
+        min-height: 29.7cm; /* Proporção A4 */
+    }
+
+    .status-stamp {
+        position: absolute;
+        top: 20px;
+        right: 60px;
+        transform: rotate(15deg);
+        opacity: 0.2;
+        font-size: 3rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        border: 8px solid;
+        padding: 10px 30px;
+        pointer-events: none;
+    }
+
+    /* Estilos para Impressão */
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+        body {
+            background-color: white !important;
+            padding: 0 !important;
+        }
+        .quote-paper {
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: auto !important;
+        }
+        .container {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+    }
+</style>
+
+<div class="container py-5">
+    <!-- BARRA DE ACÇÕES (Não sai no PDF) -->
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print">
+        <a href="/budgets" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Voltar à Lista
+        </a>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-dark shadow-sm">
+                <i class="bi bi-printer me-2"></i>Imprimir / Guardar PDF
+            </button>
+            <a href="/budgets/edit/{{budget.id}}" class="btn btn-primary shadow-sm">
+                <i class="bi bi-pencil me-2"></i>Editar
+            </a>
+        </div>
+    </div>
+
+    <!-- DOCUMENTO (O que será impresso) -->
+    <div class="quote-paper position-relative">
+        
+        <!-- Carimbo de Estado -->
+        {{#if (eq budget.status "Approved")}}
+            <div class="status-stamp text-success border-success">Aprovado</div>
+        {{else if (eq budget.status "Rejected")}}
+            <div class="status-stamp text-danger border-danger">Rejeitado</div>
+        {{/if}}
+
+        <div class="row mb-5">
+            <div class="col-6">
+                <h1 class="fw-bold text-primary mb-1">BudgetMaster</h1>
+                <p class="text-muted small">
+                    Rua da Inovação, 123 - Parque Tecnológico<br>
+                    Horizonte, Ceará - Brasil<br>
+                    geral@budgetmaster.com
+                </p>
+            </div>
+            <div class="col-6 text-end">
+                <h2 class="fw-bold text-uppercase mb-0">Orçamento</h2>
+                <div class="text-muted fs-5">Nº #{{budget.id}}</div>
+            </div>
+        </div>
+
+        <hr class="my-5 opacity-10">
+
+        <div class="row mb-5">
+            <div class="col-6">
+                <h6 class="text-uppercase text-muted fw-bold small mb-3">Dados do Cliente</h6>
+                <h5 class="fw-bold mb-1">{{budget.customerName}}</h5>
+                <p class="text-muted">{{budget.customerEmail}}</p>
+            </div>
+            <div class="col-6 text-end">
+                <h6 class="text-uppercase text-muted fw-bold small mb-3">Informações Adicionais</h6>
+                <p class="mb-1"><strong>Emissão:</strong> {{formatDate budget.issueDate}}</p>
+                <p class="mb-0"><strong>Validade:</strong> {{formatDate budget.expiryDate}}</p>
+            </div>
+        </div>
+
+        <table class="table table-borderless mb-5">
+            <thead class="border-bottom border-2 border-dark">
+                <tr class="text-uppercase small fw-bold">
+                    <th class="py-3">Descrição do Item / Serviço</th>
+                    <th class="py-3 text-center">Qtd</th>
+                    <th class="py-3 text-end">Unitário</th>
+                    <th class="py-3 text-end">Subtotal</th>
+                </tr>
+            </thead>
+            <tbody class="border-bottom">
+                {{#each items}}
+                <tr>
+                    <td class="py-3">
+                        <div class="fw-bold text-dark">{{this.description}}</div>
+                        <small class="text-muted">{{this.itemType}}</small>
+                    </td>
+                    <td class="py-3 text-center">{{this.quantity}}</td>
+                    <td class="py-3 text-end">{{formatCurrency this.unitPrice}}</td>
+                    <td class="py-3 text-end fw-bold">{{formatCurrency this.subtotal}}</td>
+                </tr>
+                {{/each}}
+            </tbody>
+        </table>
+
+        <div class="row justify-content-end mb-5">
+            <div class="col-md-5">
+                <div class="d-flex justify-content-between p-3 bg-light rounded-3">
+                    <span class="h4 fw-bold mb-0">Total Geral:</span>
+                    <span class="h4 fw-bold text-primary mb-0">{{formatCurrency budget.totalAmount}}</span>
+                </div>
+            </div>
+        </div>
+
+        {{#if budget.notes}}
+        <div class="mb-5 pt-4 border-top">
+            <h6 class="text-uppercase text-muted fw-bold small mb-2">Notas e Termos</h6>
+            <div class="text-muted" style="white-space: pre-wrap;">{{budget.notes}}</div>
+        </div>
+        {{/if}}
+
+        <div class="mt-auto pt-5">
+            <div class="row text-center mt-5">
+                <div class="col-6">
+                    <div class="border-top pt-2 mx-4">
+                        <small class="text-muted">Responsável p/ Emissão</small>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="border-top pt-2 mx-4">
+                        <small class="text-muted">Aceite do Cliente</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

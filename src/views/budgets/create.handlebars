@@ -1,0 +1,188 @@
+<div class="container py-4 animate-fade-in">
+    <form action="/budgets/save" method="POST" id="budgetForm">
+        <!-- CABEÇALHO -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2 class="text-primary fw-bold mb-0">Novo Orçamento</h2>
+                <p class="text-muted">Selecione itens do catálogo para preenchimento automático.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/budgets" class="btn btn-outline-secondary px-4">Cancelar</a>
+                <button type="submit" class="btn btn-primary px-4 shadow-sm">
+                    <i class="bi bi-check-lg me-2"></i>Salvar Orçamento
+                </button>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Dados do Cliente -->
+            <div class="col-lg-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-muted">CLIENTE / EMPRESA</label>
+                                <input type="text" name="customerName" class="form-control" placeholder="Nome do cliente" required />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-muted">E-MAIL</label>
+                                <input type="email" name="customerEmail" class="form-control" placeholder="exemplo@email.com" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small text-muted">DATA DE EMISSÃO</label>
+                                <input type="date" name="issueDate" id="issueDate" class="form-control" required />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small text-muted">VALIDADE (DIAS)</label>
+                                <select name="expiryDays" class="form-select">
+                                    <option value="7">7 dias</option>
+                                    <option value="15" selected>15 dias</option>
+                                    <option value="30">30 dias</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold small text-muted">STATUS INICIAL</label>
+                                <select name="status" class="form-select">
+                                    <option value="Pending">Pendente</option>
+                                    <option value="Approved">Aprovado</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabela de Itens com Carga do Catálogo -->
+            <div class="col-lg-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0 fw-bold text-primary">Itens do Orçamento</h5>
+                        <button type="button" class="btn btn-sm btn-success" id="btn-add-item">
+                            <i class="bi bi-plus-lg me-1"></i>Adicionar Item
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0" id="items-table">
+                            <thead class="table-light small fw-bold">
+                                <tr>
+                                    <th style="width: 15%;">Tipo</th>
+                                    <th style="width: 40%;">Produto / Serviço (Catálogo)</th>
+                                    <th style="width: 10%;">Qtd</th>
+                                    <th style="width: 15%;">Unitário (R$)</th>
+                                    <th style="width: 15%;" class="text-end">Subtotal</th>
+                                    <th style="width: 5%;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="items-body">
+                                <tr class="item-row">
+                                    <td>
+                                        <input type="text" name="items[0][itemType]" class="form-control form-control-sm bg-light input-type" readonly value="Product">
+                                    </td>
+                                    <td>
+                                        <select name="items[0][description]" class="form-select form-select-sm select-product" required>
+                                            <option value="" selected disabled>Escolha um item do catálogo...</option>
+                                            {{#each products}}
+                                            <option value="{{this.name}}" data-price="{{this.basePrice}}" data-type="{{this.itemType}}">
+                                                {{this.name}} ({{this.itemType}})
+                                            </option>
+                                            {{/each}}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" name="items[0][quantity]" class="form-control form-control-sm text-center input-qty" value="1" min="1">
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.01" name="items[0][unitPrice]" class="form-control form-control-sm text-end input-price" value="0.00">
+                                    </td>
+                                    <td class="text-end fw-bold">
+                                        <span class="row-subtotal">R$ 0,00</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-link text-danger p-0 btn-remove-row" disabled><i class="bi bi-trash"></i></button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resumo e Notas -->
+            <div class="col-lg-8">
+                <textarea name="notes" class="form-control" rows="5" placeholder="Observações adicionais..."></textarea>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow-sm border-0 bg-primary text-white">
+                    <div class="card-body text-center py-4">
+                        <small class="text-uppercase opacity-75">Total do Orçamento</small>
+                        <h2 class="fw-bold mb-0" id="summary-total">R$ 0,00</h2>
+                        <input type="hidden" name="totalAmount" id="hidden-total" value="0">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    (function() {
+        const itemsBody = document.getElementById('items-body');
+        const btnAdd = document.getElementById('btn-add-item');
+        let rowCount = 1;
+
+        const formatBRL = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        const calculate = () => {
+            let total = 0;
+            document.querySelectorAll('.item-row').forEach(row => {
+                const q = parseFloat(row.querySelector('.input-qty').value) || 0;
+                const p = parseFloat(row.querySelector('.input-price').value) || 0;
+                const sub = q * p;
+                row.querySelector('.row-subtotal').innerText = formatBRL(sub);
+                total += sub;
+            });
+            document.getElementById('summary-total').innerText = formatBRL(total);
+            document.getElementById('hidden-total').value = total.toFixed(2);
+        };
+
+        // Preencher data de hoje
+        document.getElementById('issueDate').value = new Date().toISOString().split('T')[0];
+
+        // Evento de seleção de produto
+        itemsBody.addEventListener('change', (e) => {
+            if (e.target.classList.contains('select-product')) {
+                const opt = e.target.options[e.target.selectedIndex];
+                const row = e.target.closest('tr');
+                row.querySelector('.input-price').value = opt.dataset.price || 0;
+                row.querySelector('.input-type').value = opt.dataset.type || 'Product';
+                calculate();
+            }
+        });
+
+        itemsBody.addEventListener('input', (e) => {
+            if (e.target.classList.contains('input-qty') || e.target.classList.contains('input-price')) calculate();
+        });
+
+        btnAdd.addEventListener('click', () => {
+            const firstRow = document.querySelector('.item-row');
+            const newRow = firstRow.cloneNode(true);
+            newRow.querySelectorAll('input, select').forEach(el => {
+                const name = el.getAttribute('name');
+                if (name) el.setAttribute('name', name.replace(/\[\d+\]/, `[${rowCount}]`));
+                if (el.classList.contains('input-qty')) el.value = 1;
+                else if (el.classList.contains('select-product')) el.selectedIndex = 0;
+                else if (!el.classList.contains('input-type')) el.value = '';
+            });
+            newRow.querySelector('.row-subtotal').innerText = 'R$ 0,00';
+            const delBtn = newRow.querySelector('.btn-remove-row');
+            delBtn.disabled = false;
+            delBtn.addEventListener('click', () => { newRow.remove(); calculate(); });
+            itemsBody.appendChild(newRow);
+            rowCount++;
+        });
+
+        document.querySelectorAll('.btn-remove-row').forEach(btn => {
+            btn.addEventListener('click', () => { if(document.querySelectorAll('.item-row').length > 1) { btn.closest('tr').remove(); calculate(); } });
+        });
+    })();
+</script>
