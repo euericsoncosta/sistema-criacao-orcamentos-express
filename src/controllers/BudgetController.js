@@ -4,36 +4,37 @@ import Product from "../models/Product.js";
 
 /**
  * BudgetController - Gestor central do módulo de Orçamentos.
- * Responsável por unir o catálogo de produtos à geração de propostas comerciais.
+ * Ajustado para compatibilidade com Aiven (SSL) e Sequelize (Underscored).
  */
 class BudgetController {
   
   /**
    * INDEX: Lista todos os orçamentos.
-   * Ordenados por data de criação (descendente).
    */
   async index(req, res) {
     try {
+      // Proteção contra falha de inicialização do modelo
+      if (!Budget.sequelize) throw new Error("Conexão com o banco de dados não detectada.");
+
       const budgets = await Budget.findAll({
         order: [["created_at", "DESC"]],
         raw: true,
       });
 
       res.render("budgets/index", {
-        budgets,
+        budgets: budgets || [],
         title: "Gestão de Orçamentos | BudgetMaster",
       });
     } catch (error) {
       console.error("Erro ao procurar orçamentos:", error);
       res.status(500).render("error", {
-        message: "Não foi possível carregar a listagem de orçamentos.",
+        message: "Não foi possível carregar a listagem de orçamentos. Verifique a conexão com o banco.",
       });
     }
   }
 
   /**
    * CREATE: Exibe o formulário de criação.
-   * Carrega os produtos para seleção direta no catálogo.
    */
   async create(req, res) {
     try {
@@ -44,13 +45,13 @@ class BudgetController {
 
       res.render("budgets/create", {
         title: "Novo Orçamento",
-        products,
+        products: products || [],
         today: new Date().toISOString().split("T")[0],
       });
     } catch (error) {
       console.error("Erro ao carregar catálogo:", error);
       res.status(500).render("error", {
-        message: "Erro ao aceder ao catálogo de produtos.",
+        message: "Erro ao acessar o catálogo de produtos.",
       });
     }
   }
@@ -59,10 +60,6 @@ class BudgetController {
    * STORE: Guarda um novo orçamento e os seus itens.
    */
   async store(req, res) {
-    if (!req.body) {
-      return res.status(400).render("error", { message: "Dados do formulário não recebidos." });
-    }
-
     const {
       customerName,
       customerEmail,
@@ -87,18 +84,17 @@ class BudgetController {
         expiryDate,
         totalAmount: parseFloat(totalAmount || 0),
         notes,
-        status: "Pending", // Status inicial padrão
+        status: "Pending",
       });
 
-      // Criação dos Itens (Filhos)
+      // Criação dos Itens (Filhos) - Usando 'budget_id' por causa do underscored: true
       if (items && Array.isArray(items)) {
         const itemsToSave = items.map((item) => {
           const price = parseFloat(item.price || item.unitPrice || 0);
           const qty = parseInt(item.quantity || 0);
           return {
-            budgetId: budget.id,
+            budget_id: budget.id, // Campo correto para o banco
             description: item.description,
-            itemType: item.itemType || "Product",
             quantity: qty,
             unitPrice: price,
             subtotal: qty * price,
@@ -112,13 +108,13 @@ class BudgetController {
     } catch (error) {
       console.error("Erro ao guardar orçamento:", error);
       res.status(400).render("error", {
-        message: "Erro ao processar a gravação do orçamento.",
+        message: "Erro ao processar a gravação do orçamento. Verifique os dados inseridos.",
       });
     }
   }
 
   /**
-   * EDIT: Prepara o formulário de edição com os dados atuais.
+   * EDIT: Prepara o formulário de edição.
    */
   async edit(req, res) {
     const { id } = req.params;
@@ -136,8 +132,8 @@ class BudgetController {
 
       res.render("budgets/edit", {
         budget,
-        items: budget.items,
-        products,
+        items: budget.items || [],
+        products: products || [],
         title: `Editar Orçamento #${id}`,
       });
     } catch (error) {
@@ -147,7 +143,7 @@ class BudgetController {
   }
 
   /**
-   * UPDATE: Atualiza os dados do orçamento e substitui os itens.
+   * UPDATE: Atualiza os dados e sincroniza os itens.
    */
   async update(req, res) {
     const { id } = req.params;
@@ -166,7 +162,6 @@ class BudgetController {
       const budget = await Budget.findByPk(id);
       if (!budget) return res.status(404).render("error", { message: "Orçamento inexistente." });
 
-      // Recalcular validade com base na nova data ou dias informados
       const date = new Date(issueDate || budget.issueDate);
       date.setDate(date.getDate() + parseInt(expiryDays || 15));
       const expiryDate = date.toISOString().split("T")[0];
@@ -181,17 +176,16 @@ class BudgetController {
         notes,
       });
 
-      // Lógica de Sincronização de Itens: Apaga os antigos e cria os novos
-      await BudgetItem.destroy({ where: { budgetId: id } });
+      // Sincronização: Remove antigos e insere novos (budget_id)
+      await BudgetItem.destroy({ where: { budget_id: id } });
 
       if (items && Array.isArray(items)) {
         const itemsToSave = items.map((item) => {
           const price = parseFloat(item.price || item.unitPrice || 0);
           const qty = parseInt(item.quantity || 0);
           return {
-            budgetId: id,
+            budget_id: id,
             description: item.description,
-            itemType: item.itemType || "Product",
             quantity: qty,
             unitPrice: price,
             subtotal: qty * price,
@@ -209,7 +203,7 @@ class BudgetController {
   }
 
   /**
-   * SHOW: Vista de visualização e impressão (PDF-ready).
+   * SHOW: Visualização detalhada.
    */
   async show(req, res) {
     const { id } = req.params;
@@ -226,29 +220,29 @@ class BudgetController {
 
       res.render("budgets/view", {
         budget,
-        items: budget.items,
+        items: budget.items || [],
         title: `Visualizar Orçamento #${id}`,
       });
     } catch (error) {
       console.error("Erro ao visualizar:", error);
-      res.status(500).render("error", { message: "Erro ao gerar visualização do orçamento." });
+      res.status(500).render("error", { message: "Erro ao gerar visualização." });
     }
   }
 
   /**
-   * DELETE: Remove permanentemente um orçamento e itens associados.
+   * DELETE: Remove o orçamento.
    */
   async delete(req, res) {
     const { id } = req.params;
     try {
       const budget = await Budget.findByPk(id);
-      if (!budget) return res.status(404).render("error", { message: "Registo não encontrado." });
+      if (!budget) return res.status(404).render("error", { message: "Registro não encontrado." });
 
       await budget.destroy();
       res.redirect("/budgets");
     } catch (error) {
       console.error("Erro ao eliminar:", error);
-      res.status(500).render("error", { message: "Erro ao eliminar o registo." });
+      res.status(500).render("error", { message: "Erro ao eliminar o registro." });
     }
   }
 }

@@ -1,42 +1,100 @@
 import Product from "../models/Product.js";
 
 /**
- * ProductController - Gerencia o cadastro de Produtos e Serviços
+ * ProductController - Gerencia o cadastro de Produtos e Serviços.
+ * Ajustado para estabilidade na Vercel e tratamento de erros robusto.
  */
 class ProductController {
-  // GET /products - Listagem
+  
+  /**
+   * INDEX: Listagem de todos os produtos e serviços.
+   */
   async index(req, res) {
     try {
-      const products = await Product.findAll({ raw: true });
-      res.render("products/index", { products, title: "Produtos e Serviços" });
+      // Proteção contra falha de inicialização (Comum na Vercel com Aiven)
+      if (!Product.sequelize) {
+        throw new Error("O sistema ainda não estabeleceu conexão com o banco de dados.");
+      }
+
+      const products = await Product.findAll({ 
+        order: [['name', 'ASC']],
+        raw: true 
+      });
+
+      res.render("products/index", { 
+        products: products || [], 
+        title: "Catálogo de Produtos e Serviços | BudgetMaster" 
+      });
     } catch (error) {
-      res.status(500).send("Erro ao listar produtos.");
+      console.error("Erro ao listar produtos:", error);
+      res.status(500).render("error", {
+        message: "Não foi possível carregar o catálogo de produtos no momento.",
+        error: error.message
+      });
     }
   }
 
-  // GET /products/new - Formulário
+  /**
+   * CREATE: Renderiza o formulário de cadastro.
+   */
   async create(req, res) {
-    res.render("products/new", { title: "Cadastrar Item" });
+    try {
+      res.render("products/new", { 
+        title: "Cadastrar Novo Item | BudgetMaster" 
+      });
+    } catch (error) {
+      res.status(500).render("error", { message: "Erro ao abrir formulário de cadastro." });
+    }
   }
 
-  // POST /products/save - Salvar
+  /**
+   * STORE: Salva o novo produto ou serviço no banco de dados.
+   */
   async store(req, res) {
     try {
       const { name, itemType, basePrice } = req.body;
-      await Product.create({ name, itemType, basePrice });
+
+      // Validação simples
+      if (!name || !basePrice) {
+        return res.status(400).render("error", { message: "Nome e Preço Base são obrigatórios." });
+      }
+
+      await Product.create({ 
+        name, 
+        itemType: itemType || 'Product', 
+        basePrice: parseFloat(basePrice) 
+      });
+
       res.redirect("/products");
     } catch (error) {
-      res.status(400).send("Erro ao salvar produto.");
+      console.error("Erro ao salvar produto:", error);
+      res.status(400).render("error", {
+        message: "Falha ao gravar o produto. Verifique se os dados estão corretos.",
+        error: error.message
+      });
     }
   }
 
-  // GET /products/delete/:id
+  /**
+   * DELETE: Remove um item do catálogo pelo ID.
+   */
   async delete(req, res) {
     try {
-      await Product.destroy({ where: { id: req.params.id } });
+      const { id } = req.params;
+      
+      const product = await Product.findByPk(id);
+      if (!product) {
+        return res.status(404).render("error", { message: "Produto não encontrado para exclusão." });
+      }
+
+      await product.destroy();
       res.redirect("/products");
     } catch (error) {
-      res.status(500).send("Erro ao deletar.");
+      console.error("Erro ao deletar produto:", error);
+      res.status(500).render("error", {
+        message: "Não foi possível remover o item. Ele pode estar sendo usado em algum orçamento.",
+        error: error.message
+      });
     }
   }
 }
