@@ -1,55 +1,54 @@
 import Budget from "../models/Budget.js";
 
-/**
- * HomeController - Gerencia a lógica do Dashboard seguindo o padrão de Classe
- */
 class HomeController {
-  /**
-   * GET /
-   * Renderiza a página inicial com estatísticas resumidas e orçamentos recentes.
-   */
   async index(req, res) {
     try {
-      // 1. Busca todos os orçamentos ordenados do mais recente para o mais antigo
-      // Usamos raw: true para facilitar a leitura no Handlebars
+      // Verificação de segurança: Se o modelo não carregou, evita o crash
+      if (!Budget || typeof Budget.findAll !== 'function') {
+        throw new Error("O modelo Budget não foi inicializado corretamente.");
+      }
+
       const budgets = await Budget.findAll({
         order: [["created_at", "DESC"]],
         raw: true,
       });
 
-      // 2. Processamento de Estatísticas para o Dashboard
-      const stats = {
-        totalCount: budgets.length,
-        pendingCount: budgets.filter((b) => b.status === "Pending").length,
-        approvedCount: budgets.filter((b) => b.status === "Approved").length,
-        rejectedCount: budgets.filter((b) => b.status === "Rejected").length,
+      // Se budgets for null ou undefined por erro de conexão, tratamos aqui
+      const safeBudgets = budgets || [];
 
-        // Calcula o valor total financeiro
-        totalValue: budgets.reduce(
-          (acc, curr) => acc + parseFloat(curr.totalAmount || 0),
+      const stats = {
+        totalCount: safeBudgets.length,
+        pendingCount: safeBudgets.filter((b) => b.status === "Pending").length,
+        approvedCount: safeBudgets.filter((b) => b.status === "Approved").length,
+        rejectedCount: safeBudgets.filter((b) => b.status === "Rejected").length,
+
+        totalValue: safeBudgets.reduce(
+          (acc, curr) => acc + parseFloat(curr.total_amount || curr.totalAmount || 0),
           0,
         ),
       };
 
-      // 3. Seleciona apenas os 5 orçamentos mais recentes para a tabela resumida
-      const recentBudgets = budgets.slice(0, 5);
+      const recentBudgets = safeBudgets.slice(0, 5);
 
-      // 4. Renderiza a view 'home'
       res.render("home", {
         title: "Dashboard | BudgetMaster",
         stats,
         recentBudgets,
       });
     } catch (error) {
-      console.error("Erro ao carregar o dashboard:", error);
+      console.error("Erro detalhado ao carregar o dashboard:", error);
 
-      res.status(500).render("error", {
-        message: "Ocorreu um erro ao carregar as informações do sistema.",
-        error: process.env.NODE_ENV === "development" ? error : {},
-      });
+      // Fallback: Se a view 'error' não existir (como o log indicou), enviamos JSON ou Texto
+      try {
+        res.status(500).render("error", {
+          message: "Ocorreu um erro ao carregar as informações do sistema.",
+          error: process.env.NODE_ENV === "development" ? error.message : {},
+        });
+      } catch (renderError) {
+        res.status(500).send(`Erro interno no servidor: ${error.message}`);
+      }
     }
   }
 }
 
-// Exporta uma nova instância da classe (Padrão Singleton para Controllers)
 export default new HomeController();
