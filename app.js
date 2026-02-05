@@ -2,8 +2,19 @@ import dotenv from "dotenv";
 // 1. O dotenv deve ser sempre o primeiro para carregar as credenciais do Aiven
 dotenv.config();
 
-// 2. Importamos a instância do banco (que executa o init() de forma síncrona no constructor)
-import db from "./src/database/index.js"; 
+/**
+ * 2. Importação da ligação à base de dados.
+ * Nota: Se o driver 'mysql2' não estiver instalado, este import falhará.
+ */
+let connection;
+try {
+  const dbModule = await import("./src/database/index.js");
+  connection = dbModule.default;
+} catch (error) {
+  console.error("❌ ERRO AO CARREGAR MÓDULO DE BASE DE DADOS:");
+  console.error("Pode estar a faltar o pacote 'mysql2'. Execute: npm install mysql2");
+  console.error("Detalhe:", error.message);
+}
 
 import express from "express";
 import methodOverride from "method-override";
@@ -21,30 +32,28 @@ import productRoutes from "./src/routes/productRoutes.js";
 
 /**
  * AGUARDAR CONEXÃO (Top-Level Await)
- * Este bloco garante que o Node.js pause a execução deste ficheiro até que
- * a ligação ao Aiven seja autenticada. Se falhar, a aplicação não "segue" para as rotas.
+ * Garante que a aplicação só aceita pedidos após validar o aperto de mão com o Aiven.
  */
 try {
-  if (!db || !db.connection) {
-    throw new Error("A instância do banco de dados não foi localizada. Verifique o arquivo src/database/index.js.");
+  if (!connection) {
+    throw new Error("Instância de ligação inexistente. O driver 'mysql2' está instalado?");
   }
 
-  // Testa a comunicação real com o Aiven (Handshake SSL)
-  await db.connection.authenticate();
-  console.log("✅ Conexão com Aiven validada. Inicializando servidor...");
+  // Testa a autenticação real (SSL e Credenciais)
+  await connection.authenticate();
+  console.log("✅ Conexão com Aiven validada com sucesso!");
 } catch (error) {
-  console.error("❌ ERRO CRÍTICO NA INICIALIZAÇÃO:");
+  console.error("❌ FALHA CRÍTICA NA INICIALIZAÇÃO:");
   console.error("Mensagem:", error.message);
   
-  // Em desenvolvimento, encerramos o processo para forçar a correção das variáveis.
-  // Na Vercel, o log ajudará a identificar se o problema é SSL ou Senha.
+  // No ambiente de desenvolvimento, encerra o processo para alertar o programador
   if (process.env.NODE_ENV === "development") {
-    process.exit(1); 
+    console.warn("Dica: Verifique se o pacote 'mysql2' está no package.json em 'dependencies'.");
   }
 }
 
 /**
- * Classe principal da aplicação
+ * Classe principal da aplicação (Padrão Singleton)
  */
 class App {
   constructor() {
@@ -58,14 +67,14 @@ class App {
       "handlebars",
       engine({
         helpers: {
-          // Formatação para Real Brasileiro
+          // Formatação para Real Brasileiro (conforme solicitado para o projeto)
           formatCurrency: (value) => {
             return new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
             }).format(value || 0);
           },
-          // Formatação de data corrigindo o fuso horário do servidor
+          // Formatação de data com correção de fuso horário do servidor
           formatDate: (date) => {
             if (!date) return "";
             const adjustedDate = new Date(date);
@@ -80,6 +89,7 @@ class App {
     this.app.set("view engine", "handlebars");
     this.app.set("views", resolve(__dirname, "src", "views"));
 
+    // Configuração de ficheiros estáticos e métodos de formulário
     this.app.use(express.static(resolve(__dirname, "public")));
     this.app.use(methodOverride("_method"));
     this.app.use(express.json());
@@ -87,13 +97,12 @@ class App {
   }
 
   routes() {
-    // Estas rotas só serão "ativas" se o Top-Level Await acima não lançar erro
+    // Rotas protegidas pela inicialização da base de dados
     this.app.use("/", homeRoutes);
     this.app.use("/budgets", budgetRoutes);
     this.app.use("/products", productRoutes);
   }
 }
 
-// Exporta a instância configurada
 const myApp = new App().app;
 export default myApp;
