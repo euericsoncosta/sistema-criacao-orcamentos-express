@@ -1,7 +1,9 @@
 import dotenv from "dotenv";
 //configurando o dotenv
 dotenv.config();
-import "./src/database/index.js"; // Importando a conexão com o banco de dados
+
+// Mova a importação do banco de dados para ser chamada dentro da classe
+// import "./src/database/index.js"; // <-- REMOVA ESTA LINHA DAQUI
 
 import express from "express";
 import methodOverride from "method-override";
@@ -12,7 +14,6 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 
-
 //importando as rotas
 import homeRoutes from "./src/routes/homeRoutes.js";
 import budgetRoutes from "./src/routes/budgetRoutes.js";
@@ -21,44 +22,46 @@ import productRoutes from "./src/routes/productRoutes.js";
 class App {
   constructor() {
     this.app = express();
+    this.database(); // <-- ADICIONE A CHAMADA PARA O MÉTODO DO BANCO DE DADOS
     this.middlewares();
     this.routes();
   }
 
+  // CRIE UM NOVO MÉTODO PARA INICIALIZAR O BANCO DE DADOS
+  database() {
+    import("./src/database/index.js");
+  }
+
   middlewares() {
     //configurando o engine de template handlebars
-    // Configura o Handlebars como motor de visualização
+    // ... (o resto do seu método middlewares permanece o mesmo)
     this.app.engine(
       "handlebars",
       engine({
         helpers: {
-          // Helper para formatar valores monetários (Ex: 1250.5 -> € 1.250,50)
           formatCurrency: (value) => {
-            return new Intl.NumberFormat("pt-PT", {
+            return new Intl.NumberFormat("pt-BR", { // Corrigido para pt-BR para o Real
               style: "currency",
               currency: "BRL",
             }).format(value || 0);
           },
-          // Helper para formatar datas (Ex: 2023-10-27 -> 27/10/2023)
           formatDate: (date) => {
             if (!date) return "";
-            return new Date(date).toLocaleDateString("pt-PT");
+            // Adicionado ajuste de fuso horário para evitar problemas com datas
+            const adjustedDate = new Date(date);
+            adjustedDate.setMinutes(adjustedDate.getMinutes() + adjustedDate.getTimezoneOffset());
+            return adjustedDate.toLocaleDateString("pt-BR"); // Corrigido para pt-BR
           },
-          // Helper de comparação (essencial para os badges de status)
           eq: (v1, v2) => v1 === v2,
         },
         defaultLayout: "main",
-      }),
+      })
     );
     this.app.set("view engine", "handlebars");
     this.app.set("views", resolve(__dirname, "src", "views"));
 
-    //configurar pasta public
     this.app.use(express.static(resolve(__dirname, "public")));
-
-    this.app.use(methodOverride("_method")); // Configura o método de substituição para permitir PUT e DELETE via POST
-
-    // Configurando o express para aceitar JSON e URL-encoded
+    this.app.use(methodOverride("_method"));
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
   }
