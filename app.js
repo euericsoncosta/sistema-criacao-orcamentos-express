@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 // 1. O dotenv deve ser sempre o primeiro para carregar as credenciais do Aiven
 dotenv.config();
 
-// 2. Importamos a instância do banco (que já executa o init no constructor)
+// 2. Importamos a instância do banco (que executa o init() de forma síncrona no constructor)
 import db from "./src/database/index.js"; 
 
 import express from "express";
@@ -21,17 +21,26 @@ import productRoutes from "./src/routes/productRoutes.js";
 
 /**
  * AGUARDAR CONEXÃO (Top-Level Await)
- * Bloqueia a execução deste módulo até que o banco responda com sucesso.
- * Isso garante que 'export default app' só aconteça com o banco pronto.
+ * Este bloco garante que o Node.js pause a execução deste ficheiro até que
+ * a ligação ao Aiven seja autenticada. Se falhar, a aplicação não "segue" para as rotas.
  */
 try {
-  if (db && db.connection) {
-    await db.connection.authenticate();
-    console.log("✅ Servidor aguardou e confirmou conexão com Aiven.");
+  if (!db || !db.connection) {
+    throw new Error("A instância do banco de dados não foi localizada. Verifique o arquivo src/database/index.js.");
   }
+
+  // Testa a comunicação real com o Aiven (Handshake SSL)
+  await db.connection.authenticate();
+  console.log("✅ Conexão com Aiven validada. Inicializando servidor...");
 } catch (error) {
-  console.error("❌ A aplicação não pôde iniciar devido a falha no banco:", error.message);
-  // Em ambientes serverless, não encerramos o processo, mas o erro será logado
+  console.error("❌ ERRO CRÍTICO NA INICIALIZAÇÃO:");
+  console.error("Mensagem:", error.message);
+  
+  // Em desenvolvimento, encerramos o processo para forçar a correção das variáveis.
+  // Na Vercel, o log ajudará a identificar se o problema é SSL ou Senha.
+  if (process.env.NODE_ENV === "development") {
+    process.exit(1); 
+  }
 }
 
 /**
@@ -49,12 +58,14 @@ class App {
       "handlebars",
       engine({
         helpers: {
+          // Formatação para Real Brasileiro
           formatCurrency: (value) => {
             return new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
             }).format(value || 0);
           },
+          // Formatação de data corrigindo o fuso horário do servidor
           formatDate: (date) => {
             if (!date) return "";
             const adjustedDate = new Date(date);
@@ -76,12 +87,13 @@ class App {
   }
 
   routes() {
+    // Estas rotas só serão "ativas" se o Top-Level Await acima não lançar erro
     this.app.use("/", homeRoutes);
     this.app.use("/budgets", budgetRoutes);
     this.app.use("/products", productRoutes);
   }
 }
 
-// Exporta a instância pronta
+// Exporta a instância configurada
 const myApp = new App().app;
 export default myApp;
