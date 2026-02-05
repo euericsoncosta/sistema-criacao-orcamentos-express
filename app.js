@@ -1,8 +1,9 @@
 import dotenv from "dotenv";
+// 1. O dotenv deve ser sempre o primeiro para carregar as credenciais do Aiven
 dotenv.config();
 
-// Importação síncrona para garantir que o banco esteja pronto antes das rotas
-import "./src/database/index.js"; 
+// 2. Importamos a instância do banco (que já executa o init no constructor)
+import db from "./src/database/index.js"; 
 
 import express from "express";
 import methodOverride from "method-override";
@@ -13,11 +14,29 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 
-// Importando as rotas
+// Importação das rotas
 import homeRoutes from "./src/routes/homeRoutes.js";
 import budgetRoutes from "./src/routes/budgetRoutes.js";
 import productRoutes from "./src/routes/productRoutes.js";
 
+/**
+ * AGUARDAR CONEXÃO (Top-Level Await)
+ * Bloqueia a execução deste módulo até que o banco responda com sucesso.
+ * Isso garante que 'export default app' só aconteça com o banco pronto.
+ */
+try {
+  if (db && db.connection) {
+    await db.connection.authenticate();
+    console.log("✅ Servidor aguardou e confirmou conexão com Aiven.");
+  }
+} catch (error) {
+  console.error("❌ A aplicação não pôde iniciar devido a falha no banco:", error.message);
+  // Em ambientes serverless, não encerramos o processo, mas o erro será logado
+}
+
+/**
+ * Classe principal da aplicação
+ */
 class App {
   constructor() {
     this.app = express();
@@ -30,18 +49,15 @@ class App {
       "handlebars",
       engine({
         helpers: {
-          // Helper para formatar valores monetários (Padrão Real Brasileiro)
           formatCurrency: (value) => {
             return new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
             }).format(value || 0);
           },
-          // Helper para formatar datas corrigindo o fuso horário (UTC)
           formatDate: (date) => {
             if (!date) return "";
             const adjustedDate = new Date(date);
-            // Ajuste para evitar que a data mude por causa do fuso horário do servidor
             adjustedDate.setMinutes(adjustedDate.getMinutes() + adjustedDate.getTimezoneOffset());
             return adjustedDate.toLocaleDateString("pt-BR");
           },
@@ -66,5 +82,6 @@ class App {
   }
 }
 
-// Exporta apenas a instância do express
-export default new App().app;
+// Exporta a instância pronta
+const myApp = new App().app;
+export default myApp;
