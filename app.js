@@ -4,7 +4,7 @@ dotenv.config();
 
 /**
  * 2. Importação da ligação à base de dados.
- * Nota: Se o driver 'mysql2' não estiver instalado, este import falhará.
+ * No Render, o processo é persistente, o que torna a ligação mais estável.
  */
 let connection;
 try {
@@ -12,7 +12,7 @@ try {
   connection = dbModule.default;
 } catch (error) {
   console.error("❌ ERRO AO CARREGAR MÓDULO DE BASE DE DADOS:");
-  console.error("Pode estar a faltar o pacote 'mysql2'. Execute: npm install mysql2");
+  console.error("Certifique-se de que o pacote 'mysql2' está nas dependencies do package.json.");
   console.error("Detalhe:", error.message);
 }
 
@@ -32,24 +32,17 @@ import productRoutes from "./src/routes/productRoutes.js";
 
 /**
  * AGUARDAR CONEXÃO (Top-Level Await)
- * Garante que a aplicação só aceita pedidos após validar o aperto de mão com o Aiven.
+ * No Render, isto garante que o serviço só fica "Live" (Verde) 
+ * após a confirmação de que o banco Aiven aceitou a ligação.
  */
 try {
-  if (!connection) {
-    throw new Error("Instância de ligação inexistente. O driver 'mysql2' está instalado?");
+  if (connection) {
+    await connection.authenticate();
+    console.log("✅ Conexão com Aiven validada. Web Service pronto!");
   }
-
-  // Testa a autenticação real (SSL e Credenciais)
-  await connection.authenticate();
-  console.log("✅ Conexão com Aiven validada com sucesso!");
 } catch (error) {
   console.error("❌ FALHA CRÍTICA NA INICIALIZAÇÃO:");
   console.error("Mensagem:", error.message);
-  
-  // No ambiente de desenvolvimento, encerra o processo para alertar o programador
-  if (process.env.NODE_ENV === "development") {
-    console.warn("Dica: Verifique se o pacote 'mysql2' está no package.json em 'dependencies'.");
-  }
 }
 
 /**
@@ -67,14 +60,14 @@ class App {
       "handlebars",
       engine({
         helpers: {
-          // Formatação para Real Brasileiro (conforme solicitado para o projeto)
+          // Formatação para Real Brasileiro
           formatCurrency: (value) => {
             return new Intl.NumberFormat("pt-BR", {
               style: "currency",
               currency: "BRL",
             }).format(value || 0);
           },
-          // Formatação de data com correção de fuso horário do servidor
+          // Formatação de data com correção de fuso horário
           formatDate: (date) => {
             if (!date) return "";
             const adjustedDate = new Date(date);
@@ -89,7 +82,6 @@ class App {
     this.app.set("view engine", "handlebars");
     this.app.set("views", resolve(__dirname, "src", "views"));
 
-    // Configuração de ficheiros estáticos e métodos de formulário
     this.app.use(express.static(resolve(__dirname, "public")));
     this.app.use(methodOverride("_method"));
     this.app.use(express.json());
@@ -97,7 +89,6 @@ class App {
   }
 
   routes() {
-    // Rotas protegidas pela inicialização da base de dados
     this.app.use("/", homeRoutes);
     this.app.use("/budgets", budgetRoutes);
     this.app.use("/products", productRoutes);
