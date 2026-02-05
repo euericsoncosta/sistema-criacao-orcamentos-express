@@ -2,55 +2,57 @@ import Budget from "../models/Budget.js";
 
 /**
  * HomeController - Gerencia a lógica do Dashboard.
- * Versão resiliente para Vercel/Aiven, compatível com variáveis de ambiente ou config fixa.
+ * Versão de Alta Resiliência: Força o diagnóstico de conexão e mapeamento de dados.
  */
 class HomeController {
   /**
    * GET /
-   * Renderiza a página inicial com estatísticas e diagnósticos de banco.
+   * Renderiza a página inicial com estatísticas.
    */
   async index(req, res) {
     try {
       /**
-       * 1. VERIFICAÇÃO DE INICIALIZAÇÃO DO MODELO
-       * O Sequelize injeta a propriedade 'sequelize' no modelo após o init().
-       * Se estiver nulo, o arquivo src/database/index.js não foi executado ou falhou.
+       * 1. VERIFICAÇÃO DE ESTADO DO MODELO (Obrigatório para Vercel)
        */
-      const isModelInitialized = !!(Budget && Budget.sequelize);
-
-      if (!isModelInitialized) {
-        // Diagnóstico para o log da Vercel
-        console.error("DEBUG - Falha de Inicialização. Verifique se o Budget.init(connection) foi chamado.");
-        
-        throw new Error("O modelo 'Budget' não foi carregado. Certifique-se de que o banco de dados foi inicializado no seu arquivo de entrada (app.js ou server.js).");
+      const isInitialized = !!(Budget && Budget.sequelize);
+      
+      if (!isInitialized) {
+        console.error("ERRO CRÍTICO: Modelo Budget sem instância do Sequelize.");
+        throw new Error("O modelo de dados não foi inicializado. Verifique se o arquivo 'src/database/index.js' está sendo importado corretamente no topo do seu 'app.js'.");
       }
 
       /**
        * 2. TESTE DE CONEXÃO ATIVA (Autenticação no Aiven)
-       * Tenta um 'ping' no banco. Se as credenciais estiverem erradas ou o SSL falhar, 
-       * o erro será capturado aqui antes do crash 'Object.keys'.
        */
-      await Budget.sequelize.authenticate().catch(err => {
-        console.error("Erro de Autenticação no Aiven:", err.message);
-        throw new Error("Não foi possível conectar ao banco Aiven. Verifique o SSL e as credenciais no arquivo de configuração. Detalhe: " + err.message);
-      });
+      try {
+        await Budget.sequelize.authenticate();
+      } catch (authError) {
+        console.error("ERRO DE AUTENTICAÇÃO AIVEN:", authError.message);
+        throw new Error(`Falha ao conectar ao banco Aiven: ${authError.message}. Verifique o SSL e as credenciais.`);
+      }
 
-      // 3. Busca de Dados
+      /**
+       * 3. BUSCA DE DADOS
+       * Tentamos buscar os dados. Se retornar vazio, verificamos o motivo.
+       */
       const budgets = await Budget.findAll({
         order: [["created_at", "DESC"]],
         raw: true,
       });
 
+      // Se a conexão funciona mas não vem dados, pode ser um banco vazio ou erro de tabela
       const safeBudgets = budgets || [];
 
-      // 4. Processamento de Estatísticas para o Dashboard
+      /**
+       * 4. PROCESSAMENTO DE ESTATÍSTICAS
+       * Nota: Usamos curr.total_amount devido à configuração 'underscored: true'
+       */
       const stats = {
         totalCount: safeBudgets.length,
         pendingCount: safeBudgets.filter((b) => b.status === "Pending").length,
         approvedCount: safeBudgets.filter((b) => b.status === "Approved").length,
         rejectedCount: safeBudgets.filter((b) => b.status === "Rejected").length,
 
-        // Soma total (considerando underscored: true - campo total_amount no banco)
         totalValue: safeBudgets.reduce(
           (acc, curr) => acc + parseFloat(curr.total_amount || curr.totalAmount || 0),
           0,
@@ -59,41 +61,37 @@ class HomeController {
 
       const recentBudgets = safeBudgets.slice(0, 5);
 
+      // Log para debug no painel da Vercel
+      console.log(`Dashboard carregado: ${safeBudgets.length} orçamentos encontrados.`);
+
       res.render("home", {
         title: "Dashboard | BudgetMaster",
         stats,
         recentBudgets,
+        hasData: safeBudgets.length > 0
       });
 
     } catch (error) {
       console.error("Erro no HomeController:", error.message);
-      
       res.status(500);
       
-      /**
-       * RESILIÊNCIA DE VIEWS:
-       * Se a Vercel não encontrar a view 'error', enviamos um HTML básico de emergência.
-       */
       res.render("error", {
         message: error.message,
         error: process.env.NODE_ENV === "development" ? error : {},
       }, (err, html) => {
         if (err) {
-          // Fallback visual caso o arquivo error.handlebars não seja localizado
+          // Fallback visual de emergência se a view 'error' sumir na Vercel
           return res.send(`
-            <div style="font-family: sans-serif; padding: 40px; text-align: center; background: #fdfdfd; min-height: 100vh;">
-              <div style="max-width: 600px; margin: auto; padding: 30px; border: 1px solid #ffcccc; background: #fff5f5; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                <h2 style="color: #c0392b;">Erro de Ligação com o Banco</h2>
-                <p style="color: #555; line-height: 1.5;">${error.message}</p>
-                <div style="margin-top: 20px; text-align: left; background: #fff; padding: 15px; border: 1px solid #ddd; font-size: 0.9rem;">
-                  <strong>Dica de Debug:</strong><br>
-                  1. O erro de <code>avnadmin is not defined</code> foi resolvido (agora usa aspas).<br>
-                  2. Verifique se o <strong>SSL</strong> está habilitado com <code>rejectUnauthorized: false</code>.<br>
-                  3. Certifique-se de que o arquivo <code>src/database/index.js</code> está sendo importado no seu <code>app.js</code>.
+            <div style="font-family: sans-serif; padding: 50px; text-align: center; background: #fafafa;">
+              <div style="max-width: 600px; margin: auto; background: #fff; padding: 30px; border-radius: 10px; border: 1px solid #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                <h1 style="color: #e74c3c;">Erro de Dados</h1>
+                <p style="color: #333; font-size: 1.1rem;">${error.message}</p>
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-left: 5px solid #e74c3c; text-align: left;">
+                  <strong>Dica de Correção:</strong><br>
+                  Certifique-se de que no seu <code>app.js</code>, a linha <code>import "./src/database/index.js"</code> 
+                  está ANTES de qualquer rota. No Linux (Vercel), a ordem de importação é rígida.
                 </div>
-                <button onclick="window.location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #e74c3c; color: white; border: none; border-radius: 5px; cursor: pointer;">
-                  Atualizar Página
-                </button>
+                <button onclick="window.location.reload()" style="margin-top: 20px; background: #3498db; color: #fff; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">Recarregar Sistema</button>
               </div>
             </div>
           `);
